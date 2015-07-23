@@ -41,9 +41,11 @@ func TestMarshalOnePayloadWithExtras(t *testing.T) {
 	testModel := testBlog()
 	buf := bytes.NewBuffer(nil)
 
+	nextPage := "2"
+
 	if err := MarshalOnePayloadWithExtras(buf, testModel, func(c *ApiExtras) {
 		c.AddLink("current", "blogs", make([]string, 0), fmt.Sprintf(linkTemplate, "{blogs.id}"))
-		c.AddLink("next", "blogs", make([]string, 0), fmt.Sprintf(linkTemplate, "{blogs.id}")+"&page=2")
+		c.AddLink("next", "blogs", make([]string, 0), fmt.Sprintf(linkTemplate+"&page=%s", "{blogs.id}", nextPage))
 	}); err != nil {
 		t.Fatal(err)
 	}
