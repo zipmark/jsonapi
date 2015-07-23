@@ -1,15 +1,18 @@
 package jsonapi
 
 type OnePayload struct {
-	Data     *Node              `json:"data"`
-	Included []*Node            `json:"included,omitempty"`
-	Links    *map[string]string `json:"links,omitempty"`
+	Data     *Node             `json:"data"`
+	Included []*Node           `json:"included,omitempty"`
+	Links    map[string]string `json:"links,omitempty"`
+	Meta     map[string]string `json:"meta,omitempty"`
+	JsonApi  map[string]string `json:"jsonapi,omitempty"`
 }
 
 type ManyPayload struct {
-	Data     []*Node            `json:"data"`
-	Included []*Node            `json:"included,omitempty"`
-	Links    *map[string]string `json:"links,omitempty"`
+	Data     []*Node           `json:"data"`
+	Included []*Node           `json:"included,omitempty"`
+	Links    map[string]string `json:"links,omitempty"`
+	Meta     map[string]string `json:"meta,omitempty"`
 }
 
 type Node struct {
@@ -20,11 +23,13 @@ type Node struct {
 }
 
 type RelationshipOneNode struct {
-	Data  *Node              `json:"data"`
-	Links *map[string]string `json:"links,omitempty"`
+	Data  *Node             `json:"data"`
+	Links map[string]string `json:"links,omitempty"`
+	Meta  map[string]string `json:"meta,omitempty"`
 }
 
 type RelationshipManyNode struct {
-	Data  []*Node            `json:"data"`
-	Links *map[string]string `json:"links,omitempty"`
+	Data  []*Node           `json:"data"`
+	Links map[string]string `json:"links,omitempty"`
+	Meta  map[string]string `json:"meta,omitempty"`
 }

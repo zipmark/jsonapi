@@ -3,6 +3,7 @@ package jsonapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"testing"
 	"time"
@@ -32,6 +33,42 @@ type Comment struct {
 	Id     int    `jsonapi:"primary,comments"`
 	PostId int    `jsonapi:"attr,post_id"`
 	Body   string `jsonapi:"attr,body"`
+}
+
+const linkTemplate = "https://localhost:8080/api/v1/blogs?id=%s"
+
+func TestMarshalOnePayloadWithExtras(t *testing.T) {
+	testModel := testBlog()
+	buf := bytes.NewBuffer(nil)
+
+	if err := MarshalOnePayloadWithExtras(buf, testModel, func(c *ApiExtras) {
+		c.AddLink("current", "blogs", make([]string, 0), fmt.Sprintf(linkTemplate, "{blogs.id}"))
+		c.AddLink("next", "blogs", make([]string, 0), fmt.Sprintf(linkTemplate, "{blogs.id}")+"&page=2")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := new(OnePayload)
+
+	if err := json.NewDecoder(buf).Decode(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(payload.Links) != 2 {
+		t.Fatalf("wrong number of links")
+	}
+
+	if payload.Links["current"] == "" {
+		t.Fatalf("did not assign current link to correct name")
+	}
+
+	if payload.Links["current"] != fmt.Sprintf(linkTemplate, "5") {
+		t.Fatalf("formatting link template failed")
+	}
+
+	if !regexp.MustCompile(`page=2`).Match([]byte(payload.Links["next"])) {
+		t.Fatalf("next link failed to compile or was not set")
+	}
 }
 
 func TestMalformedTagResposne(t *testing.T) {

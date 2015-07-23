@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -23,6 +24,46 @@ func MarshalOnePayload(w io.Writer, model interface{}) error {
 		return err
 	}
 	payload := &OnePayload{Data: rootNode}
+
+	payload.Included = uniqueByTypeAndId(included)
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func MarshalOnePayloadWithExtras(w io.Writer, model interface{}, c func(*ApiExtras)) error {
+	extras := new(ApiExtras)
+
+	c(extras)
+
+	return MarshalOnePayloadWithExtrasConfig(w, model, extras)
+}
+
+func MarshalOnePayloadWithExtrasConfig(w io.Writer, model interface{}, extras *ApiExtras) error {
+	if extras != nil {
+		if err := extras.Build(); err != nil {
+			return err
+		}
+	}
+
+	rootNode, included, err := visitModelNode(model, true)
+	if err != nil {
+		return err
+	}
+
+	payload := &OnePayload{Data: rootNode}
+
+	if extras != nil {
+		rootNodeLinks, err := getRootNodeLiks(rootNode, extras)
+		if err != nil {
+			return err
+		}
+
+		payload.Links = rootNodeLinks
+	}
 
 	payload.Included = uniqueByTypeAndId(included)
 
@@ -283,4 +324,68 @@ func uniqueByTypeAndId(nodes []*Node) []*Node {
 	}
 
 	return nodes
+}
+
+func getRootNodeLiks(rootNode *Node, extras *ApiExtras) (map[string]string, error) {
+	links := make(map[string]string)
+	linkConfigs := extras.LinkPaths[rootNode.Type]
+
+	for _, lc := range linkConfigs {
+		link, err := sprintfLinkValue(lc, map[string]*Node{rootNode.Type: rootNode})
+		if err != nil {
+			return links, err
+		}
+
+		links[lc.Name] = link
+	}
+
+	return links, nil
+}
+
+//func getNodeLinks(node *Node, nodes map[string]*Node, linkPaths map[string][]*LinkConfiguration, path string) (map[string]string, error) {
+//links := make(map[string]string)
+//linkConfigs := linkPaths[path]
+
+//for _, lc := range linkConfigs {
+//link, err := sprintfLinkValue(lc, nodes)
+//if err != nil {
+//return links, err
+//}
+
+//links[lc.Name] = link
+//}
+
+//return links, nil
+//}
+
+func sprintfLinkValue(lc *LinkConfiguration, nodes map[string]*Node) (string, error) {
+	link := lc.Format
+	format := []byte(lc.Format)
+	regex := regexp.MustCompile(`(?:\{((?:\w+\.?)+)\})`)
+
+	for _, m := range regex.FindAll(format, -1) {
+		match := string(m)
+		parts := strings.Split(match[1:len(match)-1], ".")
+
+		recordType := parts[0]
+
+		n := nodes[recordType]
+
+		if n == nil {
+			return "", errors.New("No record matched")
+		}
+
+		var value interface{}
+
+		attr := parts[len(parts)-1]
+		if attr == "id" {
+			value = n.Id
+		} else {
+			value = n.Attributes[attr]
+		}
+
+		link = strings.Replace(link, match, fmt.Sprintf("%v", value), -1)
+	}
+
+	return link, nil
 }
