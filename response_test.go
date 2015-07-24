@@ -10,23 +10,29 @@ import (
 )
 
 type Blog struct {
-	Id            int       `jsonapi:"primary,blogs"`
-	Title         string    `jsonapi:"attr,title"`
-	Posts         []*Post   `jsonapi:"relation,posts"`
-	CurrentPost   *Post     `jsonapi:"relation,current_post"`
-	CurrentPostId int       `jsonapi:"attr,current_post_id"`
-	CreatedAt     time.Time `jsonapi:"attr,created_at"`
-	ViewCount     int       `jsonapi:"attr,view_count"`
+	Id               int               `jsonapi:"primary,blogs"`
+	Links            map[string]string `jsonapi:"links,top"`
+	Title            string            `jsonapi:"attr,title"`
+	Posts            []*Post           `jsonapi:"relation,posts"`
+	PostsLinks       map[string]string `jsonapi:"links,posts"`
+	CurrentPost      *Post             `jsonapi:"relation,current_post"`
+	CurrentPostLinks map[string]string `jsonapi:"links,current_post"`
+	CurrentPostId    int               `jsonapi:"attr,current_post_id"`
+	CreatedAt        time.Time         `jsonapi:"attr,created_at"`
+	ViewCount        int               `jsonapi:"attr,view_count"`
 }
 
 type Post struct {
 	Blog
-	Id            int        `jsonapi:"primary,posts"`
-	BlogId        int        `jsonapi:"attr,blog_id"`
-	Title         string     `jsonapi:"attr,title"`
-	Body          string     `jsonapi:"attr,body"`
-	Comments      []*Comment `jsonapi:"relation,comments"`
-	LatestComment *Comment   `jsonapi:"relation,latest_comment"`
+	Id                 int               `jsonapi:"primary,posts"`
+	Links              map[string]string `jsonapi:"links,top"`
+	BlogId             int               `jsonapi:"attr,blog_id"`
+	Title              string            `jsonapi:"attr,title"`
+	Body               string            `jsonapi:"attr,body"`
+	Comments           []*Comment        `jsonapi:"relation,comments"`
+	CommentsLinks      map[string]string `jsonapi:"links,comments"`
+	LatestComment      *Comment          `jsonapi:"relation,latest_comment"`
+	LatestCommentLinks map[string]string `jsonapi:"links,latest_comment`
 }
 
 type Comment struct {
