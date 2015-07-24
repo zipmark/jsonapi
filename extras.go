@@ -1,39 +1,41 @@
 package jsonapi
 
+import "fmt"
+
 type ApiExtras struct {
-	Links     []*LinkConfiguration
-	LinkPaths map[string][]*LinkConfiguration
+	RootLinks              map[string]string
+	RelationshipLinks      []*LinkConfiguration
+	KeyedRelationshipLinks map[string][]*LinkConfiguration
 }
 
-func (extras *ApiExtras) AddLink(name string, recordType string, parentRecordTypes []string, format string) {
-	extras.Links = append(extras.Links, &LinkConfiguration{
-		Name:              name,
-		RecordType:        recordType,
-		ParentRecordTypes: parentRecordTypes,
-		Format:            format,
+func (extras *ApiExtras) AddRootLink(linkName string, format string) {
+	if extras.RootLinks == nil {
+		extras.RootLinks = make(map[string]string)
+	}
+
+	extras.RootLinks[linkName] = format
+}
+
+func (extras *ApiExtras) AddRelationshipLink(linkName string, recordType string, relationshipName string, parentRecordType string, format string) {
+	extras.RelationshipLinks = append(extras.RelationshipLinks, &LinkConfiguration{
+		Name:             linkName,
+		RecordType:       recordType,
+		ParentRecordType: parentRecordType,
+		RelationshipName: relationshipName,
+		Format:           format,
 	})
 }
 
-func (lc *LinkConfiguration) PathKey() string {
-	k := ""
-
-	for _, recordType := range lc.ParentRecordTypes {
-		k = k + recordType + "."
-	}
-
-	return k + lc.RecordType
-}
-
 func (extras *ApiExtras) Build() error {
-	extras.LinkPaths = make(map[string][]*LinkConfiguration)
+	extras.KeyedRelationshipLinks = make(map[string][]*LinkConfiguration)
 
-	for _, lc := range extras.Links {
-		k := lc.PathKey()
+	for _, lc := range extras.RelationshipLinks {
+		k := fmt.Sprintf("%s,%s,%s", lc.RecordType, lc.ParentRecordType, lc.RelationshipName)
 
-		if extras.LinkPaths[k] == nil {
-			extras.LinkPaths[k] = []*LinkConfiguration{lc}
+		if extras.KeyedRelationshipLinks[k] == nil {
+			extras.KeyedRelationshipLinks[k] = []*LinkConfiguration{lc}
 		} else {
-			extras.LinkPaths[k] = append(extras.LinkPaths[k], lc)
+			extras.KeyedRelationshipLinks[k] = append(extras.KeyedRelationshipLinks[k], lc)
 		}
 	}
 
@@ -41,8 +43,9 @@ func (extras *ApiExtras) Build() error {
 }
 
 type LinkConfiguration struct {
-	Name              string
-	RecordType        string
-	ParentRecordTypes []string
-	Format            string
+	Name             string
+	RecordType       string
+	ParentRecordType string
+	RelationshipName string
+	Format           string
 }

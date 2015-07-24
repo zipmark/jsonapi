@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -25,7 +26,7 @@ func MarshalOnePayload(w io.Writer, model interface{}) error {
 	}
 	payload := &OnePayload{Data: rootNode}
 
-	payload.Included = uniqueByTypeAndId(included)
+	payload.Included, _ = uniqueByTypeAndId(included)
 
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		return err
@@ -55,17 +56,23 @@ func MarshalOnePayloadWithExtrasConfig(w io.Writer, model interface{}, extras *A
 	}
 
 	payload := &OnePayload{Data: rootNode}
+	uniqueIncluded, includedMap := uniqueByTypeAndId(included)
+	payload.Included = uniqueIncluded
 
 	if extras != nil {
-		rootNodeLinks, err := getRootNodeLiks(rootNode, extras)
-		if err != nil {
-			return err
+		rootNodeLinks := make(map[string]string)
+		nodeStack := []*Node{rootNode}
+
+		for linkName, format := range extras.RootLinks {
+			rootNodeLinks[linkName] = sprintfLink(format, nodeStack, includedMap)
 		}
 
 		payload.Links = rootNodeLinks
-	}
 
-	payload.Included = uniqueByTypeAndId(included)
+		if rootNode.Relationships != nil && len(rootNode.Relationships) > 0 {
+			visitRelationshipsAddExtras(rootNode.Relationships, extras.KeyedRelationshipLinks, nodeStack, includedMap)
+		}
+	}
 
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		return err
@@ -114,9 +121,11 @@ func MarshalManyPayload(w io.Writer, models []interface{}) error {
 		incl = append(incl, included...)
 	}
 
+	uniqueIncluded, _ := uniqueByTypeAndId(incl)
+
 	payload := &ManyPayload{
 		Data:     data,
-		Included: uniqueByTypeAndId(incl),
+		Included: uniqueIncluded,
 	}
 
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
@@ -309,7 +318,7 @@ func visitModelNodeRelationships(relationName string, models reflect.Value, side
 	return n, included, nil
 }
 
-func uniqueByTypeAndId(nodes []*Node) []*Node {
+func uniqueByTypeAndId(nodes []*Node) ([]*Node, map[string]*Node) {
 	uniqueIncluded := make(map[string]*Node)
 
 	for i := 0; i < len(nodes); i += 1 {
@@ -323,69 +332,150 @@ func uniqueByTypeAndId(nodes []*Node) []*Node {
 		}
 	}
 
-	return nodes
+	return nodes, uniqueIncluded
 }
 
-func getRootNodeLiks(rootNode *Node, extras *ApiExtras) (map[string]string, error) {
-	links := make(map[string]string)
-	linkConfigs := extras.LinkPaths[rootNode.Type]
+func visitRelationshipsAddExtras(relationships map[string]interface{}, relationshipExtras map[string][]*LinkConfiguration, nodeStack []*Node, included map[string]*Node) {
+	for relationshipName, r := range relationships {
+		var recordType string
 
-	for _, lc := range linkConfigs {
-		link, err := sprintfLinkValue(lc, map[string]*Node{rootNode.Type: rootNode})
-		if err != nil {
-			return links, err
+		withRelationship(r, func(rel *RelationshipOneNode) {
+			recordType = rel.Data.Type
+		}, func(rel *RelationshipManyNode) {
+			if rel.Data == nil || len(rel.Data) == 0 {
+				return
+			} else {
+				recordType = rel.Data[0].Type
+			}
+		})
+
+		if recordType == "" {
+			continue
 		}
 
+		k := fmt.Sprintf("%s,%s,%s", recordType, nodeStack[len(nodeStack)-1].Type, relationshipName)
+		if relationshipExtras[k] == nil {
+			return
+		}
+
+		links := relationshipLinks(relationshipExtras[k], nodeStack, included)
+
+		withRelationship(r, func(rel *RelationshipOneNode) {
+			rel.Links = links
+
+			if rel.Data.Relationships == nil || len(rel.Data.Relationships) == 0 {
+				includedKey := fmt.Sprintf("%s,%s", rel.Data.Type, rel.Data.Id)
+				incl := included[includedKey]
+
+				if incl == nil || incl.Relationships == nil || len(incl.Relationships) == 0 {
+					return
+				} else {
+					nodeStack = append(nodeStack, incl)
+				}
+			} else {
+				nodeStack = append(nodeStack, rel.Data)
+			}
+
+			visitRelationshipsAddExtras(rel.Data.Relationships, relationshipExtras, nodeStack, included)
+
+			nodeStack = nodeStack[:len(nodeStack)-1]
+		}, func(rel *RelationshipManyNode) {
+			rel.Links = links
+
+			for _, n := range rel.Data {
+				if n.Relationships == nil || len(n.Relationships) == 0 {
+					includedKey := fmt.Sprintf("%s,%s", n.Type, n.Id)
+					incl := included[includedKey]
+
+					if incl == nil || incl.Relationships == nil || len(incl.Relationships) == 0 {
+						return
+					} else {
+						nodeStack = append(nodeStack, incl)
+					}
+				} else {
+					nodeStack = append(nodeStack, n)
+				}
+
+				visitRelationshipsAddExtras(n.Relationships, relationshipExtras, nodeStack, included)
+
+				nodeStack = nodeStack[:len(nodeStack)-1]
+			}
+		})
+
+	}
+}
+
+func relationshipLinks(linkConfigs []*LinkConfiguration, nodeStack []*Node, included map[string]*Node) map[string]string {
+	links := make(map[string]string)
+
+	for _, lc := range linkConfigs {
+		link := sprintfLink(lc.Format, nodeStack, included)
 		links[lc.Name] = link
 	}
 
-	return links, nil
+	return links
 }
 
-//func getNodeLinks(node *Node, nodes map[string]*Node, linkPaths map[string][]*LinkConfiguration, path string) (map[string]string, error) {
-//links := make(map[string]string)
-//linkConfigs := linkPaths[path]
+func findNodeByType(nodes []*Node, recordType string) *Node {
+	for _, n := range nodes {
+		if n.Type == recordType {
+			return n
+		}
+	}
 
-//for _, lc := range linkConfigs {
-//link, err := sprintfLinkValue(lc, nodes)
-//if err != nil {
-//return links, err
-//}
+	return nil
+}
 
-//links[lc.Name] = link
-//}
-
-//return links, nil
-//}
-
-func sprintfLinkValue(lc *LinkConfiguration, nodes map[string]*Node) (string, error) {
-	link := lc.Format
-	format := []byte(lc.Format)
+func sprintfLink(format string, nodeStack []*Node, included map[string]*Node) string {
+	link := format
 	regex := regexp.MustCompile(`(?:\{((?:\w+\.?)+)\})`)
 
-	for _, m := range regex.FindAll(format, -1) {
+	for _, m := range regex.FindAll([]byte(format), -1) {
 		match := string(m)
 		parts := strings.Split(match[1:len(match)-1], ".")
-
+		field := parts[len(parts)-1]
 		recordType := parts[0]
 
-		n := nodes[recordType]
+		node := findNodeByType(nodeStack, recordType)
 
-		if n == nil {
-			return "", errors.New("No record matched")
+		if node == nil {
+			link = strings.Replace(link, match, "", -1)
+			continue
 		}
 
 		var value interface{}
 
-		attr := parts[len(parts)-1]
-		if attr == "id" {
-			value = n.Id
+		if field == "id" {
+			value = node.Id
 		} else {
-			value = n.Attributes[attr]
+			if node.Attributes == nil || len(node.Attributes) == 0 {
+				includedKey := fmt.Sprintf("%s,%s", node.Type, node.Id)
+				if r := included[includedKey]; r != nil {
+					value = r.Attributes[field]
+				} else {
+					return ""
+				}
+			} else {
+				value = node.Attributes[field]
+			}
 		}
 
 		link = strings.Replace(link, match, fmt.Sprintf("%v", value), -1)
 	}
 
-	return link, nil
+	uri, _ := url.Parse(link)
+	uri.RawQuery = url.QueryEscape(uri.RawQuery)
+
+	return uri.String()
+}
+
+func withRelationship(relationship interface{}, oneCallback func(r *RelationshipOneNode), manyCallback func(r *RelationshipManyNode)) {
+	r, isRelationshipOneNode := relationship.(*RelationshipOneNode)
+
+	if isRelationshipOneNode {
+		oneCallback(r)
+	} else {
+		rel := relationship.(*RelationshipManyNode)
+		manyCallback(rel)
+	}
 }

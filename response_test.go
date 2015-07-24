@@ -35,7 +35,8 @@ type Comment struct {
 	Body   string `jsonapi:"attr,body"`
 }
 
-const linkTemplate = "https://localhost:8080/api/v1/blogs?id=%s"
+const linkTemplateBlogs = "https://localhost:8080/api/v1/blogs"
+const linkTemplateBlogsPosts = "https://localhost:8080/api/v1/blogs/posts?blog_id=%s"
 
 func TestMarshalOnePayloadWithExtras(t *testing.T) {
 	testModel := testBlog()
@@ -44,8 +45,11 @@ func TestMarshalOnePayloadWithExtras(t *testing.T) {
 	nextPage := "2"
 
 	if err := MarshalOnePayloadWithExtras(buf, testModel, func(c *ApiExtras) {
-		c.AddLink("current", "blogs", make([]string, 0), fmt.Sprintf(linkTemplate, "{blogs.id}"))
-		c.AddLink("next", "blogs", make([]string, 0), fmt.Sprintf(linkTemplate+"&page=%s", "{blogs.id}", nextPage))
+		c.AddRootLink("current", linkTemplateBlogs)
+		c.AddRootLink("next", linkTemplateBlogs+"?page="+nextPage)
+		c.AddRelationshipLink("current", "posts", "posts", "blogs", fmt.Sprintf(linkTemplateBlogsPosts, "{blogs.id}"))
+		c.AddRelationshipLink("next", "posts", "posts", "blogs", fmt.Sprintf(linkTemplateBlogsPosts+"&page=%s", "{blogs.id}", nextPage))
+		c.AddRelationshipLink("current", "comments", "comments", "posts", "https://localhost:3000/api/v1/blogs/posts/comments?blog_id={blogs.id}&post_id={posts.id}")
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -60,16 +64,26 @@ func TestMarshalOnePayloadWithExtras(t *testing.T) {
 		t.Fatalf("wrong number of links")
 	}
 
-	if payload.Links["current"] == "" {
+	if !regexp.MustCompile(`api/v1`).Match([]byte(payload.Links["current"])) {
 		t.Fatalf("did not assign current link to correct name")
 	}
 
-	if payload.Links["current"] != fmt.Sprintf(linkTemplate, "5") {
-		t.Fatalf("formatting link template failed")
+	links := make(map[string]string)
+
+	for linkName, link := range payload.Data.Relationships["posts"].(map[string]interface{})["links"].(map[string]interface{}) {
+		links[linkName] = link.(string)
 	}
 
-	if !regexp.MustCompile(`page=2`).Match([]byte(payload.Links["next"])) {
-		t.Fatalf("next link failed to compile or was not set")
+	if len(links) != 2 {
+		t.Fatalf("relationship links not serialized")
+	}
+
+	if links["current"] != "https://localhost:8080/api/v1/blogs/posts?blog_id%3D5" {
+		t.Fatalf("posts relationship current link not set")
+	}
+
+	if links["next"] != "https://localhost:8080/api/v1/blogs/posts?blog_id%3D5%26page%3D2" {
+		t.Fatalf("posts relationship next link not set")
 	}
 }
 
