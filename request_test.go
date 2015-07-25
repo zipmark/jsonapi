@@ -188,6 +188,30 @@ func TestUnmarshalNestedRelationshipsSideloaded(t *testing.T) {
 	}
 }
 
+func TestTopLevelLinks(t *testing.T) {
+	payload := samplePayloadStruct()
+
+	payload.Links = make(map[string]string)
+
+	payload.Links["current"] = "https://localhost:3000/api/v1/blogs"
+
+	buf := bytes.NewBuffer(nil)
+
+	if err := json.NewEncoder(buf).Encode(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	model := new(Blog)
+
+	if err := UnmarshalPayload(buf, model); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(model.Links) != 1 {
+		t.Fatalf("did not unmarshal links")
+	}
+}
+
 func unmarshalSamplePayload() (*Blog, error) {
 	in := samplePayload()
 	out := new(Blog)
@@ -199,8 +223,8 @@ func unmarshalSamplePayload() (*Blog, error) {
 	return out, nil
 }
 
-func samplePayload() io.Reader {
-	payload := &OnePayload{
+func samplePayloadStruct() *OnePayload {
+	return &OnePayload{
 		Data: &Node{
 			Type: "blogs",
 			Attributes: map[string]interface{}{
@@ -257,6 +281,10 @@ func samplePayload() io.Reader {
 			},
 		},
 	}
+}
+
+func samplePayload() io.Reader {
+	payload := samplePayloadStruct()
 
 	out := bytes.NewBuffer(nil)
 

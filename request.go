@@ -51,18 +51,62 @@ func UnmarshalPayload(in io.Reader, model interface{}) error {
 		return err
 	}
 
-	if payload.Included != nil {
+	var er error
+
+	if payload.Included != nil && len(payload.Included) > 0 {
 		includedMap := make(map[string]*Node)
 		for _, included := range payload.Included {
 			key := fmt.Sprintf("%s,%s", included.Type, included.Id)
 			includedMap[key] = included
 		}
 
-		return unmarshalNode(payload.Data, reflect.ValueOf(model), &includedMap)
+		er = unmarshalNode(payload.Data, reflect.ValueOf(model), &includedMap)
 	} else {
-		return unmarshalNode(payload.Data, reflect.ValueOf(model), nil)
+		er = unmarshalNode(payload.Data, reflect.ValueOf(model), nil)
 	}
 
+	if er != nil {
+		return er
+	}
+
+	if payload.Links != nil && len(payload.Links) > 0 {
+		fieldValue := findFieldByJsonapiTagValues(model, "links", "top")
+		if fieldValue != nil && fieldValue.Kind() != reflect.Invalid {
+			fieldValue.Set(reflect.ValueOf(payload.Links))
+		}
+	}
+
+	return nil
+}
+
+func findFieldByJsonapiTagValues(model interface{}, annotation string, argument string) *reflect.Value {
+	var field reflect.Value
+
+	t := reflect.TypeOf(model).Elem()
+
+	t.FieldByNameFunc(func(fieldName string) bool {
+		f, found := t.FieldByName(fieldName)
+
+		if !found {
+			return false
+		}
+
+		tag := f.Tag.Get("jsonapi")
+
+		if tag == "" {
+			return false
+		}
+
+		args := strings.Split(tag, ",")
+
+		if annotation == args[0] && argument == args[1] {
+			field = reflect.ValueOf(model).Elem().FieldByName(fieldName)
+		}
+
+		return false
+	})
+
+	return &field
 }
 
 func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) error {
@@ -196,6 +240,7 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 					fieldValue.Set(m)
 				}
 
+			} else if annotation == "links" {
 			} else {
 				er = errors.New(fmt.Sprintf("Unsupported jsonapi tag annotation, %s", annotation))
 			}

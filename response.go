@@ -270,7 +270,7 @@ func visitModelNode(model interface{}, sideload bool) (*Node, []*Node, error) {
 					}
 				}
 
-			} else {
+			} else if annotation != "links" {
 				er = errors.New(fmt.Sprintf("Unsupported jsonapi tag annotation, %s", annotation))
 				return false
 			}
