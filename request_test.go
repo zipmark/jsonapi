@@ -3,7 +3,9 @@ package jsonapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/url"
 	"regexp"
 	"testing"
 	"time"
@@ -189,26 +191,55 @@ func TestUnmarshalNestedRelationshipsSideloaded(t *testing.T) {
 }
 
 func TestTopLevelLinks(t *testing.T) {
-	payload := samplePayloadStruct()
-
-	payload.Links = make(map[string]string)
-
-	payload.Links["current"] = "https://localhost:3000/api/v1/blogs"
+	model := testModel()
 
 	buf := bytes.NewBuffer(nil)
 
-	if err := json.NewEncoder(buf).Encode(payload); err != nil {
+	if err := MarshalOnePayloadWithExtras(buf, model, func(c *ApiExtras) {
+		c.AddRootLink("current", "https://localhost:3000/api/v1/blogs")
+		c.AddRelationshipLink("current", "posts", "posts", "blogs", "https://localhost:3000/api/v1/blogs/posts?blog_id={blogs.id}")
+		c.AddRelationshipLink("current", "posts", "current_post", "blogs", "https://localhost:3000/api/v1/blogs/current_post?blog_id={blogs.id}")
+		c.AddRelationshipLink("current", "comments", "comments", "posts", "https://localhost:3000/api/v1/blogs/posts/comments?blog_id={blogs.id}&post_id={posts.id}")
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	model := new(Blog)
+	blog := new(Blog)
 
-	if err := UnmarshalPayload(buf, model); err != nil {
+	if err := UnmarshalPayload(buf, blog); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(model.Links) != 1 {
+	if len(blog.Links) != 1 {
 		t.Fatalf("did not unmarshal links")
+	}
+
+	if len(blog.PostsLinks) != 1 {
+		t.Fatalf("relationship links did not unmarshal")
+	}
+
+	if blog.PostsLinks["current"] != "https://localhost:3000/api/v1/blogs/posts?blog_id%3D5" {
+		t.Fatalf("the relationship link was not correct")
+	}
+
+	if len(blog.CurrentPostLinks) != 1 {
+		t.Fatalf("relationship links did not unmarshal")
+	}
+
+	if blog.CurrentPostLinks["current"] != "https://localhost:3000/api/v1/blogs/current_post?blog_id%3D5" {
+		t.Fatalf("the relationship link was not correct")
+	}
+
+	for _, post := range blog.Posts {
+		if len(post.CommentsLinks) != 1 {
+			t.Fatalf("double nested relationship links did not unmarshal")
+		}
+
+		uri, _ := url.Parse(fmt.Sprintf("https://localhost:3000/api/v1/blogs/posts/comments?blog_id=%v&post_id=%v#", blog.Id, post.Id))
+		uri.RawQuery = url.QueryEscape(uri.RawQuery)
+		if post.CommentsLinks["current"] != uri.String() {
+			t.Fatalf("double nested relationship links did not unmarshal correctly")
+		}
 	}
 }
 

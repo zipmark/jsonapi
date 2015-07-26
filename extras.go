@@ -27,16 +27,13 @@ func (extras *ApiExtras) AddRelationshipLink(linkName string, recordType string,
 }
 
 func (extras *ApiExtras) Build() error {
+
 	extras.KeyedRelationshipLinks = make(map[string][]*LinkConfiguration)
 
 	for _, lc := range extras.RelationshipLinks {
 		k := fmt.Sprintf("%s,%s,%s", lc.RecordType, lc.ParentRecordType, lc.RelationshipName)
 
-		if extras.KeyedRelationshipLinks[k] == nil {
-			extras.KeyedRelationshipLinks[k] = []*LinkConfiguration{lc}
-		} else {
-			extras.KeyedRelationshipLinks[k] = append(extras.KeyedRelationshipLinks[k], lc)
-		}
+		extras.KeyedRelationshipLinks[k] = append(extras.KeyedRelationshipLinks[k], lc)
 	}
 
 	return nil

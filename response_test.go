@@ -76,7 +76,12 @@ func TestMarshalOnePayloadWithExtras(t *testing.T) {
 
 	links := make(map[string]string)
 
-	for linkName, link := range payload.Data.Relationships["posts"].(map[string]interface{})["links"].(map[string]interface{}) {
+	posts := payload.Data.Relationships["posts"].(map[string]interface{})
+	lnks, ok := posts["links"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("posts is missing links: %#v", posts)
+	}
+	for linkName, link := range lnks {
 		links[linkName] = link.(string)
 	}
 

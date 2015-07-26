@@ -240,6 +240,13 @@ func unmarshalNode(data *Node, model reflect.Value, included *map[string]*Node) 
 					fieldValue.Set(m)
 				}
 
+				linksValue := reflect.ValueOf(relationship["links"])
+				if relationship["links"] != nil && linksValue.Len() > 0 {
+					fieldValue := findFieldByJsonapiTagValues(model.Interface(), "links", args[1])
+					if fieldValue != nil && fieldValue.Kind() != reflect.Invalid {
+						fieldValue.Set(reflect.ValueOf(interfaceMapToStringMap(relationship["links"].(map[string]interface{}))))
+					}
+				}
 			} else if annotation == "links" {
 			} else {
 				er = errors.New(fmt.Sprintf("Unsupported jsonapi tag annotation, %s", annotation))
@@ -304,4 +311,14 @@ func mapToNode(m map[string]interface{}, attributes map[string]interface{}, rela
 	}
 
 	return node
+}
+
+func interfaceMapToStringMap(m map[string]interface{}) map[string]string {
+	stringMap := make(map[string]string)
+
+	for k, v := range m {
+		stringMap[k] = v.(string)
+	}
+
+	return stringMap
 }

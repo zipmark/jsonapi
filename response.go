@@ -355,13 +355,15 @@ func visitRelationshipsAddExtras(relationships map[string]interface{}, relations
 
 		k := fmt.Sprintf("%s,%s,%s", recordType, nodeStack[len(nodeStack)-1].Type, relationshipName)
 		if relationshipExtras[k] == nil {
-			return
+			continue
 		}
 
 		links := relationshipLinks(relationshipExtras[k], nodeStack, included)
 
 		withRelationship(r, func(rel *RelationshipOneNode) {
 			rel.Links = links
+
+			var relationships map[string]interface{}
 
 			if rel.Data.Relationships == nil || len(rel.Data.Relationships) == 0 {
 				includedKey := fmt.Sprintf("%s,%s", rel.Data.Type, rel.Data.Id)
@@ -370,33 +372,39 @@ func visitRelationshipsAddExtras(relationships map[string]interface{}, relations
 				if incl == nil || incl.Relationships == nil || len(incl.Relationships) == 0 {
 					return
 				} else {
+					relationships = incl.Relationships
 					nodeStack = append(nodeStack, incl)
 				}
 			} else {
+				relationships = rel.Data.Relationships
 				nodeStack = append(nodeStack, rel.Data)
 			}
 
-			visitRelationshipsAddExtras(rel.Data.Relationships, relationshipExtras, nodeStack, included)
+			visitRelationshipsAddExtras(relationships, relationshipExtras, nodeStack, included)
 
 			nodeStack = nodeStack[:len(nodeStack)-1]
 		}, func(rel *RelationshipManyNode) {
 			rel.Links = links
 
 			for _, n := range rel.Data {
+				var relationships map[string]interface{}
+
 				if n.Relationships == nil || len(n.Relationships) == 0 {
 					includedKey := fmt.Sprintf("%s,%s", n.Type, n.Id)
 					incl := included[includedKey]
 
 					if incl == nil || incl.Relationships == nil || len(incl.Relationships) == 0 {
-						return
+						continue
 					} else {
+						relationships = incl.Relationships
 						nodeStack = append(nodeStack, incl)
 					}
 				} else {
+					relationships = n.Relationships
 					nodeStack = append(nodeStack, n)
 				}
 
-				visitRelationshipsAddExtras(n.Relationships, relationshipExtras, nodeStack, included)
+				visitRelationshipsAddExtras(relationships, relationshipExtras, nodeStack, included)
 
 				nodeStack = nodeStack[:len(nodeStack)-1]
 			}
